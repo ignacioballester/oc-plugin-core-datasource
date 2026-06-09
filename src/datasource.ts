@@ -14,17 +14,32 @@ export class DataSource extends DataSourceWithBackend<MyQuery, MyDataSourceOptio
     return DEFAULT_QUERY;
   }
 
-  // Interpolate $var / ${var} references in the Python source so dashboard
-  // variables (e.g. $portfolio_id) are resolved before the backend sees the query.
+  // Resolve every dashboard variable to a {name: value} map the backend
+  // substitutes into the (possibly ref-resolved) Python. An inline override is
+  // still interpolated directly so ad-hoc Explore queries behave as before.
   applyTemplateVariables(query: MyQuery, scopedVars: ScopedVars): MyQuery {
+    const srv = getTemplateSrv();
+    const vars: Record<string, string> = {};
+    for (const v of srv.getVariables()) {
+      const name = (v as { name: string }).name;
+      vars[name] = srv.replace('$' + name, scopedVars);
+    }
     return {
       ...query,
-      source: getTemplateSrv().replace(query.source ?? '', scopedVars),
+      source: query.source ? srv.replace(query.source, scopedVars) : query.source,
+      vars,
     };
   }
 
   filterQuery(query: MyQuery): boolean {
-    return (query.source ?? '').trim() !== '';
+    return (query.source ?? '').trim() !== '' || (query.ref ?? '').trim() !== '';
+  }
+
+  // fetchMetricSource returns the plugin-shipped Python for a ref, for the
+  // query editor to display and to reset overrides.
+  async fetchMetricSource(ref: string): Promise<string> {
+    const res = await this.getResource('metric-source', { ref });
+    return (res?.source as string) ?? '';
   }
 
   // metricFindQuery powers the CustomVariableSupport. Runs the source
