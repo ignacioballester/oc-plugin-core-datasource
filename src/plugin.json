@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "datasource",
+  "name": "Query-Service",
+  "id": "core-datasource",
+  "metrics": true,
+  "backend": true,
+  "executable": "gpx_query_service",
+  "opencapital": {
+    "plugin_id": "core-datasource",
+    "platform_plugin": true,
+    "logical_views": [],
+    "query_entities": []
+  },
+  "info": {
+    "description": "RisingWave-backed datasource for portfolio analytics. Required for every workspace.",
+    "author": {
+      "name": "Portfoliomangement"
+    },
+    "keywords": ["datasource"],
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [],
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaDependency": ">=12.3.0",
+    "plugins": []
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "asof": {
+    "signature": "asof(navs: pl.DataFrame, t: int) -> float | None",
+    "doc": "Last non-null NAV at or before *t* (microseconds).\n\nWalks backward from the last row with ts <= t until a non-null value is found.\nReturns None when no such row exists."
+  },
+  "after": {
+    "signature": "after(navs: pl.DataFrame, t: int) -> float | None",
+    "doc": "First non-null NAV at or after *t* (microseconds).\n\nReturns None when no such row exists."
+  },
+  "before": {
+    "signature": "before(navs: pl.DataFrame, t: int) -> float | None",
+    "doc": "Last non-null NAV strictly before *t* (microseconds).\n\nReturns None when no such row exists."
+  },
+  "bounds": {
+    "signature": "bounds(flows: list[int], t0: int, t1: int) -> list[int]",
+    "doc": "Sub-period boundary timestamps for the window [t0, t1].\n\nFlows strictly inside the window are inserted in ascending order between\nt0 and t1, producing the standard GIPS boundary list."
+  },
+  "seg": {
+    "signature": "seg(navs: pl.DataFrame, a: int, b: int, first: bool, last: bool) -> float | None",
+    "doc": "Fractional return for one sub-period [a, b].\n\nOpen NAV (nav_a):\n    first segment  → at-or-before a  (opening mark is the window anchor)\n    other segments → at-or-after  a  (post-flow NAV opens the next segment)\n\nClose NAV (nav_b):\n    last segment   → at-or-before b  (closing mark is the window anchor)\n    other segments → strictly-before b  (pre-flow NAV closes the segment)\n\nReturns None if either anchor is missing or nav_a <= 0."
+  },
+  "twr": {
+    "signature": "twr(navs: pl.DataFrame, flows: list[int], t0: int, t1: int) -> float | None",
+    "doc": "Time-weighted return over the window [t0, t1].\n\nImplements the GIPS sub-period chain formula:\n    TWR = prod(1 + r_i) - 1\n\nwhere each r_i is the return of one sub-period separated by external flows.\n\nReturns None when:\n- t1 <= t0 (degenerate window)\n- any sub-period anchor NAV is missing or nav_a <= 0"
+  },
+  "build_grid": {
+    "signature": "build_grid(t0: int, t1: int, step: int | str) -> list[int]",
+    "doc": "Uniform timestamp grid over ``[t0, t1]`` at *step* intervals.\n\nPoints: ``t0, t0+step, t0+2*step, ...`` while ``<= t1``.\nEnd is inclusive; the last point is the largest ``t0 + i*step <= t1``.\n\n*step* may be a raw microsecond integer or a string like ``\"1d\"``, ``\"4h\"``.\nRaises ``ValueError`` when ``step <= 0`` or the string is unrecognised."
+  },
+  "cumulative_simple_return": {
+    "signature": "cumulative_simple_return(navs: pl.DataFrame, start: int, grid: list[int]) -> list[tuple[int, float | None]]",
+    "doc": "Close-to-close cumulative return series rebased at *start* (microseconds).\n\nEach grid point reports ``nav_at_ts / nav_at_start - 1``, where both\nlookups use at-or-before semantics.  The whole series is ``None``-filled\nwhen the start value is missing or non-positive."
+  },
+  "cumulative_twr": {
+    "signature": "cumulative_twr(navs: pl.DataFrame, flows: list[int], start: int, grid: list[int]) -> list[tuple[int, float | None]]",
+    "doc": "Cumulative TWR equity curve at each grid timestamp, rebased at *start*.\n\nComputes sub-period checkpoints once (one per flow event), then evaluates\neach grid point as a pure lookup into that checkpoint table — no mutable\nindex state, no in-loop branching on flow position.\n\nAt each grid timestamp *t*:\n    1. Identify the active epoch (latest epoch whose ``epoch_start <= t``).\n    2. Partial return for the open sub-period: ``nav_at_t / anchor - 1``.\n    3. Report: ``closed_chain * (1 + partial) - 1``.\n\nReturns ``None`` when the epoch anchor is missing/non-positive or when\nthe at-or-before NAV at the grid point is missing."
+  },
+  "sample_at_grid": {
+    "signature": "sample_at_grid(navs: pl.DataFrame, grid: list[int]) -> list[float | None]",
+    "doc": "Benchmark price at each grid tick using asof (last value at-or-before).\n\nMirrors numbat ``sample_at_grid``: forward-fill / step-function hold.\nReturns None for grid ticks where no price yet exists."
+  },
+  "cum_returns_from_navs": {
+    "signature": "cum_returns_from_navs(values: list[float | None]) -> list[float | None]",
+    "doc": "Simple cumulative return rebased at the first value: v_i / v_0 - 1.\n\nReturns None for every element when the first value is None or zero,\nand None for any element where the value itself is None.\nMirrors numbat ``cum_returns_from_navs``."
+  },
+  "cumulative_to_period_returns": {
+    "signature": "cumulative_to_period_returns(cumulative: list[tuple[int, float | None]]) -> list[tuple[int, float | None]]",
+    "doc": "Convert a (ts, cum) grid to per-period returns.\n\nPeriod return at index i is (1 + cum_i) / (1 + cum_{i-1}) - 1.\nThe first element is always (ts, None) because there is no prior period.\nNone propagates when either value is missing or the prior cumulative equals -1."
+  },
+  "rolling_regression_stats": {
+    "signature": "rolling_regression_stats(*, r_p: pl.DataFrame, r_b: pl.DataFrame, lookback: int) -> list[RegressionStats | None]",
+    "doc": "Per-index regression stats over the trailing ``lookback`` valid pairs.\n\nEach index emits stats once exactly ``lookback`` valid (non-null) pairs\nfill the sliding window; otherwise emits None.\n\n``r_p`` and ``r_b`` must be DataFrames with columns ts: Int64, ret: Float64.\nBoth must have identical ts columns in identical order."
+  },
+  "expanding_regression_stats": {
+    "signature": "expanding_regression_stats(*, r_p: pl.DataFrame, r_b: pl.DataFrame, min_obs: int = 2) -> list[RegressionStats | None]",
+    "doc": "Per-index regression stats over every valid pair up to index ``i``.\n\nEmits None until ``min_obs`` valid pairs have been accumulated.\n\n``r_p`` and ``r_b`` must be DataFrames with columns ts: Int64, ret: Float64.\nBoth must have identical ts columns in identical order."
+  },
+  "xirr": {
+    "signature": "xirr(flows: list[tuple[int, float]]) -> float | None",
+    "doc": "Annualized XIRR for a sequence of irregular cashflows.\n\n``flows`` is a list of ``(ts_us, signed_amount)`` pairs where ``ts_us`` is\na microsecond-epoch int timestamp.  Pairs may be in any order (sorted by\ntimestamp internally).  Sign convention: deposits are negative (money\nleaving the investor), receipts are positive.\n\nReturns the rate ``r`` such that NPV(r, flows) = 0, computed via pure\nbisection on [-0.99, 10.0] with 60 halvings (≈1e-18 precision on the\nrate, well below 1e-9 tolerance).\n\nReturns ``None`` — never NaN or inf — when:\n  * fewer than 2 flows are provided, or\n  * the bracket [-0.99, 10.0] has no sign change (all flows the same sign,\n    or the NPV is never zero inside the bracket)."
+  },
+  "xirr_cumulative": {
+    "signature": "xirr_cumulative(flows: list[tuple[int, float]], *, window_start: int, window_end: int) -> float | None",
+    "doc": "Cumulative return equivalent of the annualized XIRR over a window.\n\nImplements the formula from xirr_cumulative.numbat:\n\n    cumulative = (1 + xirr_annualized)^window_nyears - 1\n    window_nyears = (window_end - window_start) / xirr_year\n\n``window_start`` and ``window_end`` are microsecond-epoch int timestamps.\nReturns ``None`` when xirr(flows) is None."
+  },
+  "max_drawdown": {
+    "signature": "max_drawdown(cum: list[float | None]) -> float | None",
+    "doc": "Most negative peak-to-trough ratio over the cumulative return series.\n\nReturns 0 when the series is empty or never drops below its running peak.\nReturns None when all values are None."
+  },
+  "current_drawdown": {
+    "signature": "current_drawdown(cum: list[float | None]) -> float | None",
+    "doc": "Drawdown at the last point relative to the running peak.\n\nReturns 0 when the last point is at or above the running peak.\nReturns None when the series is empty or all values are None."
+  },
+  "drawdown_episodes": {
+    "signature": "drawdown_episodes(cum: list[float | None], grid: list[int]) -> list[DrawdownEpisode]",
+    "doc": "Every peak -> trough -> (optional) recovery cycle on the equity curve.\n\n``cum[i]`` is the cumulative return at ``grid[i]`` (int-µs timestamps).\nEpisodes are returned in chronological peak order.\nA trailing episode still below its peak at the end gets\n``recovery_ts=None``, ``time_to_recover_sec=None``."
+  },
+  "cum_to_period_returns": {
+    "signature": "cum_to_period_returns(cum: list[float | None]) -> list[float | None]",
+    "doc": "Per-period returns from a flat cumulative-return list.\n\nr_i = (1 + cum_i) / (1 + cum_{i-1}) - 1.\nFirst element is None (no prior period).  None propagates when either\nneighbour is None or the prior denominator equals -1."
+  },
+  "annualize_return": {
+    "signature": "annualize_return(total: float | None, n_periods: int, py: float) -> float | None",
+    "doc": "Geometrically rescale total return to annualised units.\n\nann = (1 + total)^(py / n_periods) - 1.\nReturns None when total is None, 0 when n_periods <= 0 or total <= -1."
+  },
+  "volatility_annualized": {
+    "signature": "volatility_annualized(returns: list[float | None], py: float) -> float | None",
+    "doc": "Annualised volatility: sample stdev of period returns * sqrt(py).\n\nReturns None when fewer than 2 valid returns are available."
+  },
+  "sharpe": {
+    "signature": "sharpe(returns: list[float | None], rf_ann: float, py: float) -> float | None",
+    "doc": "Annualised Sharpe ratio.\n\n(mean(r) - rf_per_period) / sample_stdev(r) * sqrt(py).\nReturns None when fewer than 2 valid returns; 0 when stdev == 0."
+  },
+  "sortino": {
+    "signature": "sortino(returns: list[float | None], rf_ann: float, py: float) -> float | None",
+    "doc": "Annualised Sortino ratio.\n\nNumerator same as Sharpe.  Denominator = downside deviation with\npopulation (n) denominator — Sortino 1991 original definition:\n  dd = sqrt(mean(min(r - rf_p, 0)^2)).\nReturns None when fewer than 2 valid returns; 0 when dd == 0."
+  },
+  "calmar": {
+    "signature": "calmar(ann_ret: float | None, max_dd: float | None) -> float | None",
+    "doc": "Calmar ratio: ann_ret / abs(max_dd).\n\nReturns None when either input is None.\nReturns 0 when max_dd >= 0 (no drawdown or zero denominator)."
+  },
+  "positions": {
+    "signature": "positions(closures: pl.DataFrame, cycles: pl.DataFrame, events: pl.DataFrame, instrument: pl.DataFrame) -> pl.DataFrame",
+    "doc": "Reconstruct the per-instrument position table from raw scoped views.\n\nOne row per instrument that appears in any of the four inputs. Columns match\nthe old ``positions`` SELECT (``instrument_id`` keyed); see module docstring."
+  }
+}
