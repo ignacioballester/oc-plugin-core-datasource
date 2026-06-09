@@ -18,40 +18,74 @@ type Props = QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>;
  * when the drawer closes — never per keystroke. The live editor value is held
  * in a ref so closing the drawer always commits the latest text.
  */
-export function QueryEditor({ query, onChange, onRunQuery }: Props) {
+export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) {
   const styles = useStyles2(getStyles);
   const [open, setOpen] = useState(false);
+  const [shipped, setShipped] = useState('');
   const liveSource = useRef(query.source ?? '');
 
-  // In the desktop WKWebView, Monaco's automaticLayout collapses the editor to
-  // ~5px inside the Drawer — the vh/percentage container height never resolves
-  // there (it works in Chrome, which does resolve it). So drive the size
-  // explicitly: a concrete pixel container height here, plus automaticLayout
-  // OFF and editor.layout({width,height}) with real pixels in onEditorDidMount.
+  const hasRef = !!query.ref;
+  const hasOverride = (query.source ?? '') !== '';
+  const displayValue = hasOverride ? (query.source ?? '') : shipped;
+
   const editorHeight = Math.max(
     320,
     (typeof window !== 'undefined' ? window.innerHeight : 900) - 130,
   );
 
-  // Re-seed the live ref from props each time the drawer opens, so a close-commit
-  // never reverts an edit made externally (e.g. dashboard undo) while it was shut.
+  // Fetch the shipped metric for a referenced panel so it can be shown and so
+  // "reset" has a baseline to fall back to.
+  useEffect(() => {
+    let cancelled = false;
+    if (query.ref) {
+      datasource
+        .fetchMetricSource(query.ref)
+        .then((s) => {
+          if (!cancelled) {
+            setShipped(s);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setShipped('');
+          }
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [query.ref, datasource]);
+
+  // Re-seed the live ref whenever the drawer opens, from whatever is currently
+  // shown (override if present, else the shipped baseline).
   useEffect(() => {
     if (open) {
-      liveSource.current = query.source ?? '';
+      liveSource.current = displayValue;
     }
-  }, [open, query.source]);
+  }, [open, displayValue]);
 
   const commit = useCallback(
     (source: string) => {
       liveSource.current = source;
-      if (source === (query.source ?? '')) {
+      // Editing a referenced panel writes an override; identical-to-shipped is
+      // treated as no override so the panel stays clean.
+      const nextSource = hasRef && source === shipped ? '' : source;
+      if (nextSource === (query.source ?? '')) {
         return;
       }
-      onChange({ ...query, source });
+      onChange({ ...query, source: nextSource });
       onRunQuery();
     },
-    [query, onChange, onRunQuery],
+    [query, onChange, onRunQuery, hasRef, shipped],
   );
+
+  const reset = useCallback(() => {
+    liveSource.current = shipped;
+    if ((query.source ?? '') !== '') {
+      onChange({ ...query, source: '' });
+      onRunQuery();
+    }
+  }, [query, onChange, onRunQuery, shipped]);
 
   const onBeforeEditorMount = useCallback((monaco: Monaco) => {
     registerPythonHover(monaco);
@@ -67,9 +101,21 @@ export function QueryEditor({ query, onChange, onRunQuery }: Props) {
       >
         {'</> Edit Python source'}
       </Button>
-      <span className={styles.summary} title={query.source ?? ''}>
-        {summarize(query.source)}
-      </span>
+      {hasRef && (
+        <span className={styles.summary}>
+          {`shipped: ${query.ref}${hasOverride ? ' (modified)' : ''}`}
+        </span>
+      )}
+      {hasRef && hasOverride && (
+        <Button variant="secondary" fill="text" icon="history" onClick={reset}>
+          Reset to shipped
+        </Button>
+      )}
+      {!hasRef && (
+        <span className={styles.summary} title={query.source ?? ''}>
+          {summarize(query.source)}
+        </span>
+      )}
 
       {open && (
         <Drawer
@@ -84,7 +130,7 @@ export function QueryEditor({ query, onChange, onRunQuery }: Props) {
         >
           <div style={{ height: editorHeight, width: '100%' }}>
             <CodeEditor
-              value={query.source ?? ''}
+              value={displayValue}
               language="python"
               width="100%"
               height={editorHeight}
@@ -93,20 +139,11 @@ export function QueryEditor({ query, onChange, onRunQuery }: Props) {
               monacoOptions={{ automaticLayout: false, scrollBeyondLastLine: false }}
               onBeforeEditorMount={onBeforeEditorMount}
               onEditorDidMount={(editor) => {
-                // automaticLayout collapses to ~5px in this WebKit, so it is OFF.
-                // Size the editor explicitly with real pixels instead, and keep
-                // it sized on window resize. Width comes from the live container;
-                // height from the viewport. Listener is removed on dispose.
                 const relayout = () => {
                   const node = editor.getContainerDomNode?.();
                   if (!node) {
                     return;
                   }
-                  // Grafana's CodeEditor wrappers size to content and Monaco
-                  // sizes to the wrapper, so in WebKit (which doesn't resolve the
-                  // Drawer's % height) they collapse each other to ~5px. Pin a
-                  // concrete pixel height onto the editor node AND its wrappers
-                  // to break the cycle, then lay out explicitly.
                   let el: HTMLElement | null = node;
                   for (let i = 0; i < 4 && el; i++) {
                     el.style.height = `${editorHeight}px`;
@@ -116,8 +153,6 @@ export function QueryEditor({ query, onChange, onRunQuery }: Props) {
                   editor.layout({ width: w, height: editorHeight });
                 };
                 relayout();
-                // A couple of deferred passes: the Drawer's open transition can
-                // leave the container width unresolved on the first frame.
                 setTimeout(relayout, 60);
                 setTimeout(relayout, 250);
                 window.addEventListener('resize', relayout);
