@@ -86,3 +86,15 @@ func substituteVars(code string, vars map[string]string) string {
 	})
 }
 
+// selectCode picks the code to run for a query: an inline override wins;
+// otherwise a ref is read from disk; an empty model is an error.
+func selectCode(pm panelModel, installRoot string) (string, error) {
+	if strings.TrimSpace(pm.Source) != "" {
+		return pm.Source, nil
+	}
+	if pm.Ref != "" {
+		return readMetricSource(installRoot, pm.Ref)
+	}
+	return "", fmt.Errorf("query has neither source nor ref")
+}
+

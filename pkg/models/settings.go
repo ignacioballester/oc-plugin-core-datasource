@@ -29,6 +29,12 @@ type PluginSettings struct {
 	// plugins use. Empty => pluginclient env/default fallback.
 	PluginsRoot string `json:"pluginsRoot"`
 
+	// PluginsInstallDir is the read-only root that contains every installed
+	// plugin's directory; the datasource reads `<dir>/<pluginID>/library-panels/
+	// <metric>.py` for metric refs. Empty => derived from the backend binary's
+	// own location. Configured via jsonData.pluginsInstallDir.
+	PluginsInstallDir string `json:"pluginsInstallDir"`
+
 	// PlatformToken and PluginTokens are loaded from DecryptedSecureJSONData.
 	PlatformToken string            `json:"-"`
 	PluginTokens  map[string]string `json:"-"`

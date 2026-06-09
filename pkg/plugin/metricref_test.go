@@ -83,3 +83,21 @@ func TestSubstituteVarsLeavesUnknownAndEmpty(t *testing.T) {
 		t.Errorf("nil vars should be a no-op: %q", got)
 	}
 }
+
+func TestSelectCode(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "yfinance-app", "library-panels", "m.py"), "shipped")
+
+	// override wins
+	if got, _ := selectCode(panelModel{Source: "inline"}, root); got != "inline" {
+		t.Errorf("override: got %q", got)
+	}
+	// ref read when no override
+	if got, _ := selectCode(panelModel{Ref: "yfinance-app/m"}, root); got != "shipped" {
+		t.Errorf("ref: got %q", got)
+	}
+	// neither -> error
+	if _, err := selectCode(panelModel{}, root); err == nil {
+		t.Error("empty model should error")
+	}
+}
