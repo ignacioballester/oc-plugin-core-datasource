@@ -62,3 +62,24 @@ func mustWrite(t *testing.T, path, body string) {
 		t.Fatal(err)
 	}
 }
+
+func TestSubstituteVars(t *testing.T) {
+	code := `sel = "x{portfolio=\"$portfolio_id\"}"; title = "${base_currency}"`
+	out := substituteVars(code, map[string]string{
+		"portfolio_id":  "demo",
+		"base_currency": "USD",
+	})
+	want := `sel = "x{portfolio=\"demo\"}"; title = "USD"`
+	if out != want {
+		t.Errorf("got %q want %q", out, want)
+	}
+}
+
+func TestSubstituteVarsLeavesUnknownAndEmpty(t *testing.T) {
+	if got := substituteVars("a $unknown b", map[string]string{"x": "1"}); got != "a $unknown b" {
+		t.Errorf("unknown token changed: %q", got)
+	}
+	if got := substituteVars("a $x b", nil); got != "a $x b" {
+		t.Errorf("nil vars should be a no-op: %q", got)
+	}
+}
