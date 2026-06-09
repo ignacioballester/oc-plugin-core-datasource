@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,8 +28,9 @@ import (
 
 // Compile-time interface assertions.
 var (
-	_ backend.QueryDataHandler   = (*Datasource)(nil)
-	_ backend.CheckHealthHandler = (*Datasource)(nil)
+	_ backend.QueryDataHandler    = (*Datasource)(nil)
+	_ backend.CheckHealthHandler  = (*Datasource)(nil)
+	_ backend.CallResourceHandler = (*Datasource)(nil)
 )
 
 // Datasource is a thin proxy to the local Python compute sidecar: it mints the
@@ -271,4 +274,32 @@ func (d *Datasource) CheckHealth(_ context.Context, _ *backend.CheckHealthReques
 
 func errHealth(msg string) *backend.CheckHealthResult {
 	return &backend.CheckHealthResult{Status: backend.HealthStatusError, Message: msg}
+}
+
+// CallResource serves the shipped Python for a metric ref so the query editor
+// can display it and reset overrides. GET metric-source?ref=pluginID/metric.
+func (d *Datasource) CallResource(_ context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	u, err := url.Parse(req.URL)
+	if err != nil {
+		return sendJSON(sender, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	switch strings.TrimPrefix(u.Path, "/") {
+	case "metric-source":
+		src, err := readMetricSource(d.installRoot, u.Query().Get("ref"))
+		if err != nil {
+			return sendJSON(sender, http.StatusNotFound, map[string]string{"error": err.Error()})
+		}
+		return sendJSON(sender, http.StatusOK, map[string]string{"source": src})
+	default:
+		return sender.Send(&backend.CallResourceResponse{Status: http.StatusNotFound})
+	}
+}
+
+func sendJSON(sender backend.CallResourceResponseSender, status int, body any) error {
+	b, _ := json.Marshal(body)
+	return sender.Send(&backend.CallResourceResponse{
+		Status:  status,
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
+		Body:    b,
+	})
 }
