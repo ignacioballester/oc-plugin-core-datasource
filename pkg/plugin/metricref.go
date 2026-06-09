@@ -1,0 +1,88 @@
+package plugin
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// metricRefRe matches a bare metric reference "<pluginID>/<metric-path>".
+// Real Python source never matches: it has whitespace, parens, or decorators.
+var metricRefRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*(/[A-Za-z0-9_][A-Za-z0-9_-]*)+$`)
+
+// isMetricRef reports whether s is a metric reference rather than inline Python.
+func isMetricRef(s string) bool {
+	s = strings.TrimSpace(s)
+	if strings.Contains(s, "..") {
+		return false
+	}
+	return metricRefRe.MatchString(s)
+}
+
+// resolveMetricPath maps "<pluginID>/<metric>" to the on-disk .py path under
+// installRoot, refusing anything that escapes the plugin's library-panels dir.
+func resolveMetricPath(installRoot, ref string) (string, error) {
+	if !isMetricRef(ref) {
+		return "", fmt.Errorf("not a metric ref: %q", ref)
+	}
+	pluginID, metric, _ := strings.Cut(strings.TrimSpace(ref), "/")
+	base := filepath.Join(installRoot, pluginID, "library-panels")
+	full := filepath.Join(base, filepath.FromSlash(metric)+".py")
+	baseClean := filepath.Clean(base) + string(os.PathSeparator)
+	if !strings.HasPrefix(filepath.Clean(full)+string(os.PathSeparator), baseClean) {
+		return "", fmt.Errorf("metric ref escapes plugin dir: %q", ref)
+	}
+	return full, nil
+}
+
+// readMetricSource returns the shipped Python for a metric ref.
+func readMetricSource(installRoot, ref string) (string, error) {
+	p, err := resolveMetricPath(installRoot, ref)
+	if err != nil {
+		return "", err
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return "", fmt.Errorf("metric not found: %s", ref)
+	}
+	return string(b), nil
+}
+
+// pluginsInstallRoot returns the directory that contains every installed
+// plugin's dir. override wins (desktop / tests); otherwise it is derived from
+// this backend binary's location (<root>/<pluginID>/<binary>).
+func pluginsInstallRoot(override string) (string, error) {
+	if override != "" {
+		return override, nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(filepath.Dir(exe)), nil
+}
+
+// varTokenRe matches $name and ${name}. Only the captured name is used.
+var varTokenRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+
+// substituteVars replaces $name and ${name} tokens in code with values from
+// vars. Unknown tokens are left intact. No Grafana format syntax is supported.
+func substituteVars(code string, vars map[string]string) string {
+	if len(vars) == 0 {
+		return code
+	}
+	return varTokenRe.ReplaceAllStringFunc(code, func(m string) string {
+		sub := varTokenRe.FindStringSubmatch(m)
+		name := sub[1]
+		if name == "" {
+			name = sub[2]
+		}
+		if v, ok := vars[name]; ok {
+			return v
+		}
+		return m
+	})
+}
+
