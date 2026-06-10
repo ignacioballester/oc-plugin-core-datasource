@@ -17,5 +17,6 @@ export interface MyDataSourceOptions extends DataSourceJsonData {
 // `portfolios{}`), run through the same compute path as panels. Inlined by the
 // dashboard build from the metric the variable references.
 export interface MyVariableQuery extends DataQuery {
-  source: string;
+  source?: string; // inline Python @metric source
+  ref?: string; // "pluginID/metric" — shipped metric reference
 }

@@ -38,3 +38,20 @@ test('filterQuery accepts a ref with no source', () => {
 test('fetchMetricSource calls the resource endpoint', async () => {
   expect(await ds().fetchMetricSource('yfinance-app/m')).toBe('print(1)');
 });
+
+import { variableQueryToTarget } from './datasource';
+
+test('variableQueryToTarget builds a ref target when the variable query has a ref', () => {
+  const t = variableQueryToTarget({ refId: 'V', ref: 'core-app/portfolios' }, (s: string) => s);
+  expect(t).toEqual({ refId: 'V', ref: 'core-app/portfolios' });
+});
+
+test('variableQueryToTarget interpolates and builds a source target otherwise', () => {
+  const t = variableQueryToTarget({ refId: 'V', source: 'x = "$p"' }, (s: string) => s.replace('$p', 'demo'));
+  expect(t).toEqual({ refId: 'V', source: 'x = "demo"' });
+});
+
+test('variableQueryToTarget returns null for an empty inline query', () => {
+  expect(variableQueryToTarget({ refId: 'V', source: '   ' }, (s: string) => s)).toBeNull();
+  expect(variableQueryToTarget('', (s: string) => s)).toBeNull();
+});

@@ -4,6 +4,24 @@ import { DataSourceWithBackend, getTemplateSrv } from '@grafana/runtime';
 import { MyQuery, MyDataSourceOptions, DEFAULT_QUERY, MyVariableQuery } from './types';
 import { QSVariableSupport } from './variables';
 
+// variableQueryToTarget maps a variable query to the panel-query target the
+// backend runs: a ref passes straight through; inline source is interpolated.
+// Returns null when there is nothing to run.
+export function variableQueryToTarget(
+  variableQuery: MyVariableQuery | string,
+  replace: (s: string) => string,
+): MyQuery | null {
+  if (typeof variableQuery !== 'string' && variableQuery?.ref) {
+    return { refId: variableQuery.refId ?? 'V', ref: variableQuery.ref };
+  }
+  const raw = typeof variableQuery === 'string' ? variableQuery : (variableQuery?.source ?? '');
+  const source = replace(raw);
+  if (!source.trim()) {
+    return null;
+  }
+  return { refId: 'V', source };
+}
+
 export class DataSource extends DataSourceWithBackend<MyQuery, MyDataSourceOptions> {
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
     super(instanceSettings);
@@ -49,15 +67,12 @@ export class DataSource extends DataSourceWithBackend<MyQuery, MyDataSourceOptio
     variableQuery: MyVariableQuery | string,
     options?: { scopedVars?: ScopedVars; range?: any },
   ): Promise<MetricFindValue[]> {
-    const rawSource =
-      typeof variableQuery === 'string' ? variableQuery : (variableQuery?.source ?? '');
-    const source = getTemplateSrv().replace(rawSource, options?.scopedVars ?? {});
-
-    if (!source.trim()) {
+    const query = variableQueryToTarget(variableQuery, (s) =>
+      getTemplateSrv().replace(s, options?.scopedVars ?? {}),
+    );
+    if (!query) {
       return [];
     }
-
-    const query: MyQuery = { refId: 'V', source };
 
     const { from: timeFrom, to: timeTo } =
       options?.range ?? { from: new Date(0), to: new Date() };
