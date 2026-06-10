@@ -97,20 +97,10 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
         variant="secondary"
         icon="brackets-curly"
         onClick={() => setOpen(true)}
-        aria-label="Edit Python source"
+        aria-label="Edit Code"
       >
-        {'</> Edit Python source'}
+        Edit Code
       </Button>
-      {hasRef && (
-        <span className={styles.summary}>
-          {`shipped: ${query.ref}${hasOverride ? ' (modified)' : ''}`}
-        </span>
-      )}
-      {hasRef && hasOverride && (
-        <Button variant="secondary" fill="text" icon="history" onClick={reset}>
-          Reset to shipped
-        </Button>
-      )}
       {!hasRef && (
         <span className={styles.summary} title={query.source ?? ''}>
           {summarize(query.source)}
@@ -128,6 +118,13 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
             setOpen(false);
           }}
         >
+          {hasRef && hasOverride && (
+            <div className={styles.drawerToolbar}>
+              <Button variant="secondary" fill="text" icon="history" onClick={reset}>
+                Restore Default
+              </Button>
+            </div>
+          )}
           <div style={{ height: editorHeight, width: '100%' }}>
             <CodeEditor
               value={displayValue}
@@ -221,5 +218,10 @@ const getStyles = (theme: GrafanaTheme2) => ({
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 60%;
+  `,
+  drawerToolbar: css`
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: ${theme.spacing(1)};
   `,
 });
