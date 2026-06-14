@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/ignacioballester/oc-plugin-sdk/dsl"
+	"github.com/opencapital-dev/oc-plugin-sdk/dsl"
 
 	_ "github.com/mutecomm/go-sqlcipher/v4"
 )

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
-	"github.com/ignacioballester/oc-plugin-sdk/pluginclient"
+	"github.com/opencapital-dev/oc-plugin-sdk/pluginclient"
 )
 
 // PluginSettings holds all configuration the core-datasource datasource backend
