@@ -9,8 +9,6 @@ require (
 	github.com/opencapital-dev/oc-plugin-sdk v0.2.0
 )
 
-replace github.com/opencapital-dev/oc-plugin-sdk => ../oc-plugin-sdk
-
 require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/apache/arrow-go/v18 v18.6.0 // indirect
