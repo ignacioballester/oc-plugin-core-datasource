@@ -3,6 +3,7 @@ package plugin
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -99,5 +100,58 @@ func TestSelectCode(t *testing.T) {
 	// neither -> error
 	if _, err := selectCode(panelModel{}, root); err == nil {
 		t.Error("empty model should error")
+	}
+}
+
+func writePy(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadFunctions_baseThenPlugin(t *testing.T) {
+	tmp := t.TempDir()
+	base := filepath.Join(tmp, "ds", "functions")
+	writePy(t, base, "series.py", "def over_time():\n    pass\n")
+	install := filepath.Join(tmp, "install")
+	writePy(t, filepath.Join(install, "core-app", "functions"), "extra.py", "def plug():\n    pass\n")
+
+	got := loadFunctions(base, install, "core-app/total_return")
+	if !strings.Contains(got, "over_time") || !strings.Contains(got, "plug") {
+		t.Fatalf("missing helpers: %q", got)
+	}
+	if strings.Index(got, "over_time") > strings.Index(got, "plug") {
+		t.Fatal("base must come before plugin functions")
+	}
+}
+
+func TestLoadFunctions_inlineGetsBaseOnly(t *testing.T) {
+	tmp := t.TempDir()
+	base := filepath.Join(tmp, "ds", "functions")
+	writePy(t, base, "series.py", "def over_time():\n    pass\n")
+	got := loadFunctions(base, tmp, "") // inline source: no ref
+	if !strings.Contains(got, "over_time") {
+		t.Fatal("base lib must load for inline queries")
+	}
+}
+
+func TestLoadFunctions_missingDirsSkip(t *testing.T) {
+	got := loadFunctions(filepath.Join(t.TempDir(), "nope"), t.TempDir(), "core-app/x")
+	if got != "" {
+		t.Fatalf("expected empty, got %q", got)
+	}
+}
+
+func TestLoadFunctions_refEscapeLoadsNoPlugin(t *testing.T) {
+	tmp := t.TempDir()
+	base := filepath.Join(tmp, "ds", "functions")
+	writePy(t, base, "series.py", "X=1\n")
+	got := loadFunctions(base, tmp, "../evil/metric")
+	if strings.Contains(got, "evil") {
+		t.Fatal("must not load plugin functions for a non-ref / escaping ref")
 	}
 }

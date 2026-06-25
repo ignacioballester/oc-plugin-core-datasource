@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -84,6 +85,42 @@ func substituteVars(code string, vars map[string]string) string {
 		}
 		return m
 	})
+}
+
+// loadFunctions returns the helper Python prepended to a panel source: the base
+// library shipped beside the datasource binary (baseDir), then the owning
+// plugin's functions/ when ref is a metric ref. Missing dirs are skipped; this
+// never errors (a broken helper surfaces later as a compute error).
+func loadFunctions(baseDir, installRoot, ref string) string {
+	var b strings.Builder
+	appendFunctionsDir(&b, baseDir)
+	if isMetricRef(ref) {
+		pluginID, _, _ := strings.Cut(strings.TrimSpace(ref), "/")
+		appendFunctionsDir(&b, filepath.Join(installRoot, pluginID, "functions"))
+	}
+	return b.String()
+}
+
+// appendFunctionsDir appends every *.py in dir (sorted) to b, each followed by
+// a newline. A missing/unreadable dir is a silent skip.
+func appendFunctionsDir(b *strings.Builder, dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".py") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if data, err := os.ReadFile(filepath.Join(dir, n)); err == nil {
+			b.Write(data)
+			b.WriteString("\n")
+		}
+	}
 }
 
 // selectCode picks the code to run for a query: an inline override wins;
