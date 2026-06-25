@@ -48,10 +48,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - uses: magefile/mage-action@v3
+        with:
+          install-only: true
       - name: build frontend (produces dist/plugin.json + assets)
         run: npm ci && npm run build
-      - name: copy functions into dist/ (webpack output.clean wipes non-standard dirs)
-        run: cp -r functions/ dist/functions/
+      - name: stage functions into dist/ via mage (CI must call the mage target, never an inline copy)
+        run: mage copyFunctions
       - uses: actions/download-artifact@v4
         with:
           path: /tmp/backends
