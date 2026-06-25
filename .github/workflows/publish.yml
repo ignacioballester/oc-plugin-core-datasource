@@ -50,6 +50,8 @@ jobs:
           node-version: 22
       - name: build frontend (produces dist/plugin.json + assets)
         run: npm ci && npm run build
+      - name: copy functions into dist/ (webpack output.clean wipes non-standard dirs)
+        run: cp -r functions/ dist/functions/
       - uses: actions/download-artifact@v4
         with:
           path: /tmp/backends
